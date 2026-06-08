@@ -6,6 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -54,7 +57,7 @@ val SurfaceGrey = Color(0xFFF8F9FA)
 val SurfaceContainerWhite = Color(0xFFFFFFFF)
 val GridLineColor = Color(0xFFD9DADB)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun WhiteboardScreen(
     onNavigateBack: () -> Unit = {}
@@ -70,6 +73,8 @@ fun WhiteboardScreen(
     var activeTool by remember { mutableStateOf("Pen") } // "Select", "Pen", "Eraser"
     var showMobileMenu by remember { mutableStateOf(false) }
     var showPencilSettings by remember { mutableStateOf(false) }
+    var showCalculator by remember { mutableStateOf(false) }
+    var calcOffset by remember { mutableStateOf(Offset(200f, 200f)) }
     var selectedPenType by remember { mutableStateOf("Pen") }
     val coroutineScope = rememberCoroutineScope()
 
@@ -91,74 +96,16 @@ fun WhiteboardScreen(
         translationY = offsetY
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(SurfaceGrey)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.White)) {
         val isMobile = maxWidth < 600.dp
-
-        // Grid Background
-        Canvas(modifier = canvasModifier) {
-            val spacing = 40.dp.toPx()
-            val strokeWidth = 1.dp.toPx()
-            var x = 0f
-            while (x < size.width) {
-                drawLine(GridLineColor, Offset(x, 0f), Offset(x, size.height), strokeWidth)
-                x += spacing
-            }
-            var y = 0f
-            while (y < size.height) {
-                drawLine(GridLineColor, Offset(0f, y), Offset(size.width, y), strokeWidth)
-                y += spacing
-            }
-        }
-
-        // Draw visual markers (Triangle and Sine Wave) under the strokes
-        Canvas(modifier = canvasModifier) {
-            // Sine wave
-            val sinePath = Path()
-            sinePath.moveTo(size.width * 0.15f, size.height * 0.55f)
-            sinePath.cubicTo(
-                size.width * 0.25f, size.height * 0.45f,
-                size.width * 0.35f, size.height * 0.65f,
-                size.width * 0.45f, size.height * 0.55f
-            )
-            drawPath(sinePath, Color(0xFF78350F), style = Stroke(width = 6f, cap = StrokeCap.Round))
-
-            // Triangle
-            val triCenterX = size.width * if (isMobile) 0.5f else 0.7f
-            val triCenterY = size.height * 0.6f
-            val triSize = 120.dp.toPx()
-            
-            // Triangle circle background
-            drawCircle(Color(0xFF4F46E5).copy(alpha = 0.05f), radius = triSize * 1.2f, center = Offset(triCenterX, triCenterY))
-
-            val p1 = Offset(triCenterX, triCenterY - triSize)
-            val p2 = Offset(triCenterX - triSize, triCenterY + triSize * 0.5f)
-            val p3 = Offset(triCenterX + triSize, triCenterY + triSize * 0.5f)
-
-            val triPath = Path().apply {
-                moveTo(p1.x, p1.y)
-                lineTo(p2.x, p2.y)
-                lineTo(p3.x, p3.y)
-                close()
-            }
-            drawPath(triPath, Color(0xFF0F766E).copy(alpha = 0.15f))
-            drawPath(triPath, Color(0xFF0F766E), style = Stroke(width = 4f, join = StrokeJoin.Round))
-
-            // Dots on vertices
-            drawCircle(Color.White, radius = 6.dp.toPx(), center = p1)
-            drawCircle(Color(0xFF0F766E), radius = 6.dp.toPx(), center = p1, style = Stroke(width = 2.dp.toPx()))
-            drawCircle(Color.White, radius = 6.dp.toPx(), center = p2)
-            drawCircle(Color(0xFF0F766E), radius = 6.dp.toPx(), center = p2, style = Stroke(width = 2.dp.toPx()))
-            drawCircle(Color.White, radius = 6.dp.toPx(), center = p3)
-            drawCircle(Color(0xFF0F766E), radius = 6.dp.toPx(), center = p3, style = Stroke(width = 2.dp.toPx()))
-        }
 
         // Drawing Area
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTransformGestures { centroid, pan, zoom, _ ->
-                        if (activeTool == "Select") {
+                .pointerInput(activeTool) {
+                    if (activeTool == "Select") {
+                        detectTransformGestures { centroid, pan, zoom, _ ->
                             coroutineScope.launch {
                                 val newScale = (scaleAnim.value * zoom).coerceIn(0.5f, 3f)
                                 val scaleRatio = newScale / scaleAnim.value
@@ -171,57 +118,63 @@ fun WhiteboardScreen(
                                 offsetYAnim.snapTo(newOffsetY)
                             }
                         }
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            if (activeTool in listOf("Pen", "Brush", "Highlighter", "Pencil") || activeTool == "Eraser") {
-                                val mappedX = (offset.x - offsetX) / scale
-                                val mappedY = (offset.y - offsetY) / scale
-                                currentStroke = listOf(StrokePoint(Offset(mappedX, mappedY), 1f))
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            if (activeTool in listOf("Pen", "Brush", "Highlighter", "Pencil") || activeTool == "Eraser") {
-                                val mappedX = (change.position.x - offsetX) / scale
-                                val mappedY = (change.position.y - offsetY) / scale
-                                val mappedOffset = Offset(mappedX, mappedY)
-                                
-                                val lastPoint = currentStroke?.lastOrNull()
-                                val distance = if (lastPoint != null) {
-                                    val dx = mappedX - lastPoint.offset.x
-                                    val dy = mappedY - lastPoint.offset.y
-                                    kotlin.math.sqrt(dx*dx + dy*dy)
-                                } else 0f
-                                
-                                val speed = distance.coerceIn(0f, 50f)
-                                val speedFactor = 1f - (speed / 50f)
-                                
-                                var hwPressure = change.pressure
-                                if (hwPressure.isNaN() || hwPressure == 0f) hwPressure = 1f
-                                
-                                val targetPressure = if (activeTool == "Eraser") 1f else (hwPressure * 0.4f + speedFactor * 0.6f).coerceIn(0.2f, 1.5f)
-                                
-                                currentStroke = currentStroke.orEmpty() + StrokePoint(mappedOffset, targetPressure)
-                                updateTrigger++
-                            }
-                        },
-                        onDragEnd = {
-                            if (activeTool in listOf("Pen", "Brush", "Highlighter", "Pencil") || activeTool == "Eraser") {
-                                currentStroke?.let { pts ->
-                                    val finalColor = if (activeTool == "Eraser") eraserColor else if (activeTool == "Highlighter") selectedColor.copy(alpha = 0.4f) else selectedColor
-                                    val finalWidth = if (activeTool == "Eraser") 40f else if (activeTool == "Highlighter") selectedStrokeWidth * 1.5f else selectedStrokeWidth
-                                    paths = paths + DrawnStroke(pts, finalColor, finalWidth)
-                                    undonePaths = emptyList()
+                    } else if (activeTool in listOf("Pen", "Brush", "Highlighter", "Pencil", "Eraser")) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+
+                            val mappedX = (down.position.x - offsetXAnim.value) / scaleAnim.value
+                            val mappedY = (down.position.y - offsetYAnim.value) / scaleAnim.value
+                            var stroke = listOf(StrokePoint(Offset(mappedX, mappedY), 1f))
+                            currentStroke = stroke
+
+                            do {
+                                val event = awaitPointerEvent()
+                                val ptr = event.changes.firstOrNull { it.id == down.id }
+                                if (ptr != null && ptr.pressed) {
+                                    val newPoints = mutableListOf<StrokePoint>()
+                                    val addPoint = { pos: Offset, hwPressure: Float ->
+                                        val pmX = (pos.x - offsetXAnim.value) / scaleAnim.value
+                                        val pmY = (pos.y - offsetYAnim.value) / scaleAnim.value
+                                        val pmO = Offset(pmX, pmY)
+
+                                        val lastPoint = if (newPoints.isNotEmpty()) newPoints.last() else stroke.lastOrNull()
+                                        val distance = if (lastPoint != null) {
+                                            val dx = pmX - lastPoint.offset.x
+                                            val dy = pmY - lastPoint.offset.y
+                                            kotlin.math.sqrt(dx * dx + dy * dy)
+                                        } else 0f
+
+                                        val speed = distance.coerceIn(0f, 50f)
+                                        val speedFactor = 1f - (speed / 50f)
+
+                                        val hp = if (hwPressure.isNaN() || hwPressure == 0f) 1f else hwPressure
+                                        val targetPressure = if (activeTool == "Eraser") 1f else (hp * 0.4f + speedFactor * 0.6f).coerceIn(0.2f, 1.5f)
+
+                                        newPoints.add(StrokePoint(pmO, targetPressure))
+                                    }
+
+                                    ptr.consume()
+                                    // Historical values might be experimental but they exist. Handle properties gently.
+                                    ptr.historical.forEach { h -> 
+                                        addPoint(h.position, 1f) 
+                                    }
+                                    addPoint(ptr.position, 1f)
+
+                                    stroke = stroke + newPoints
+                                    currentStroke = stroke
+                                    updateTrigger++
                                 }
-                                currentStroke = null
+                            } while (event.changes.any { it.pressed })
+
+                            currentStroke?.let { pts ->
+                                val finalColor = if (activeTool == "Eraser") eraserColor else if (activeTool == "Highlighter") selectedColor.copy(alpha = 0.4f) else selectedColor
+                                val finalWidth = if (activeTool == "Eraser") 40f else if (activeTool == "Highlighter") selectedStrokeWidth * 1.5f else selectedStrokeWidth
+                                paths = paths + DrawnStroke(pts, finalColor, finalWidth)
+                                undonePaths = emptyList()
                             }
-                        },
-                        onDragCancel = {
                             currentStroke = null
                         }
-                    )
+                    }
                 }
                 .graphicsLayer {
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
@@ -233,22 +186,89 @@ fun WhiteboardScreen(
         ) {
             val dummy = updateTrigger
             val drawStrokeSegments = { strokePoints: List<StrokePoint>, color: Color, baseWidth: Float ->
-                if (strokePoints.size == 1) {
-                    drawCircle(color, radius = baseWidth / 2f, center = strokePoints.first().offset)
-                } else if (strokePoints.isNotEmpty()) {
-                    for (i in 0 until strokePoints.size - 1) {
-                        val p1 = strokePoints[i]
-                        val p2 = strokePoints[i+1]
-                        val w = baseWidth * p1.pressure
-                        drawLine(
-                            color = color,
-                            start = p1.offset,
-                            end = p2.offset,
-                            strokeWidth = w,
-                            cap = StrokeCap.Round
+                if (strokePoints.isNotEmpty()) {
+                    if (color.alpha < 1f || activeTool == "Highlighter") {
+                    if (strokePoints.size == 1) {
+                        drawCircle(color, radius = baseWidth / 2f, center = strokePoints.first().offset)
+                    } else {
+                        val path = Path().apply {
+                            moveTo(strokePoints[0].offset.x, strokePoints[0].offset.y)
+                            for (i in 1 until strokePoints.size - 1) {
+                                val p0 = strokePoints[i - 1]
+                                val p1 = strokePoints[i]
+                                val midX = (p0.offset.x + p1.offset.x) / 2f
+                                val midY = (p0.offset.y + p1.offset.y) / 2f
+                                quadraticTo(p0.offset.x, p0.offset.y, midX, midY)
+                            }
+                            val last = strokePoints.last()
+                            lineTo(last.offset.x, last.offset.y)
+                        }
+                        drawPath(path, color, style = Stroke(width = baseWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    }
+                } else {
+                    if (strokePoints.size == 1) {
+                        drawCircle(color, radius = baseWidth * strokePoints.first().pressure / 2f, center = strokePoints.first().offset)
+                    } else if (strokePoints.size == 2) {
+                        val p1 = strokePoints[0]
+                        val p2 = strokePoints[1]
+                        val dist = kotlin.math.sqrt(
+                            (p2.offset.x - p1.offset.x) * (p2.offset.x - p1.offset.x) + 
+                            (p2.offset.y - p1.offset.y) * (p2.offset.y - p1.offset.y)
                         )
+                        val steps = kotlin.math.max(1, (dist * 2f).toInt())
+                        for (s in 0..steps) {
+                            val t = s.toFloat() / steps
+                            val x = p1.offset.x + (p2.offset.x - p1.offset.x) * t
+                            val y = p1.offset.y + (p2.offset.y - p1.offset.y) * t
+                            val pressure = p1.pressure + (p2.pressure - p1.pressure) * t
+                            drawCircle(color, radius = baseWidth * pressure / 2f, center = Offset(x, y))
+                        }
+                    } else {
+                        var prevMidX = strokePoints[0].offset.x
+                        var prevMidY = strokePoints[0].offset.y
+                        var prevPressure = strokePoints[0].pressure
+                        
+                        for (i in 1 until strokePoints.size) {
+                            val p1 = strokePoints[i - 1]
+                            val p2 = strokePoints[i]
+                            val midX = (p1.offset.x + p2.offset.x) / 2f
+                            val midY = (p1.offset.y + p2.offset.y) / 2f
+                            val midPressure = (p1.pressure + p2.pressure) / 2f
+                            
+                            val dist = kotlin.math.sqrt(
+                                 (midX - prevMidX) * (midX - prevMidX) + 
+                                 (midY - prevMidY) * (midY - prevMidY)
+                            )
+                            val steps = kotlin.math.max(1, (dist * 1.5f).toInt())
+                            for (s in 0..steps) {
+                                val t = s.toFloat() / steps
+                                val invT = 1f - t
+                                val x = invT * invT * prevMidX + 2 * invT * t * p1.offset.x + t * t * midX
+                                val y = invT * invT * prevMidY + 2 * invT * t * p1.offset.y + t * t * midY
+                                val p = invT * invT * prevPressure + 2 * invT * t * p1.pressure + t * t * midPressure
+                                drawCircle(color, radius = baseWidth * p / 2f, center = Offset(x, y))
+                            }
+                            prevMidX = midX
+                            prevMidY = midY
+                            prevPressure = midPressure
+                        }
+                        
+                        val lastP = strokePoints.last()
+                        val dist = kotlin.math.sqrt(
+                             (lastP.offset.x - prevMidX) * (lastP.offset.x - prevMidX) + 
+                             (lastP.offset.y - prevMidY) * (lastP.offset.y - prevMidY)
+                        )
+                        val steps = kotlin.math.max(1, (dist * 1.5f).toInt())
+                        for (s in 0..steps) {
+                            val t = s.toFloat() / steps
+                            val x = prevMidX + (lastP.offset.x - prevMidX) * t
+                            val y = prevMidY + (lastP.offset.y - prevMidY) * t
+                            val p = prevPressure + (lastP.pressure - prevPressure) * t
+                            drawCircle(color, radius = baseWidth * p / 2f, center = Offset(x, y))
+                        }
                     }
                 }
+            }
             }
             
             paths.forEach { stroke ->
@@ -432,6 +452,16 @@ fun WhiteboardScreen(
                         }
                     }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Map, "Minimap", tint = Color(0xFF374151)) }
                 }
+                
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White,
+                    shadowElevation = 8.dp
+                ) {
+                    IconButton(onClick = { 
+                        showCalculator = !showCalculator
+                    }, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Calculate, "Calculator", tint = if (showCalculator) Color(0xFF1E9B44) else Color(0xFF374151)) }
+                }
             }
 
             // Bottom Toolbar (Consolidated)
@@ -508,8 +538,6 @@ fun WhiteboardScreen(
                             drawLine(color, Offset(size.width*0.45f, size.height*0.7f), Offset(size.width*0.65f, size.height*0.3f), strokeWidth = 2.dp.toPx())
                         }
                     }
-                    
-                    IconButton(onClick = { }) { Icon(Icons.Outlined.Category, "Shapes", tint = Color(0xFF374151)) }
                     
                     IconButton(
                         onClick = {
@@ -616,7 +644,6 @@ fun WhiteboardScreen(
                         }
                     }
                     WhiteboardToolIcon(Icons.Outlined.AutoFixNormal, activeTool == "Eraser", onClick = { activeTool = "Eraser" })
-                    WhiteboardToolIcon(Icons.Outlined.Category, false) {}
                     WhiteboardToolIcon(Icons.Outlined.Image, false) {}
                     WhiteboardToolIcon(Icons.Outlined.CameraAlt, false) {}
                     WhiteboardToolIcon(Icons.Outlined.PictureAsPdf, false) {}
@@ -713,6 +740,10 @@ fun WhiteboardScreen(
                             offsetYAnim.animateTo(0f)
                         }
                     }) { Icon(Icons.Default.Map, "Minimap") }
+                    HorizontalDivider(modifier = Modifier.width(24.dp), color = Color.LightGray)
+                    IconButton(onClick = { showCalculator = !showCalculator }) { 
+                        Icon(Icons.Outlined.Calculate, "Calculator", tint = if (showCalculator) Color(0xFF4F46E5) else Color.DarkGray)
+                    }
                 }
             }
             
@@ -726,6 +757,20 @@ fun WhiteboardScreen(
             ) {
                 Icon(Icons.Default.AutoAwesome, "AI Magic", tint = Color.White)
             }
+        }
+        
+        if (showCalculator) {
+            CalculatorWidget(
+                onClose = { showCalculator = false },
+                modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(calcOffset.x.toInt(), calcOffset.y.toInt()) }
+                    .pointerInput(Unit) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            calcOffset += dragAmount
+                        }
+                    }
+            )
         }
     }
 }
@@ -909,6 +954,113 @@ fun PencilSettingsContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun CalculatorWidget(
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.padding(16.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFFF9FAFB),
+        shadowElevation = 16.dp
+    ) {
+        Column(modifier = Modifier.padding(24.dp).width(260.dp)) {
+            // Display
+            Column(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onClose),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text("4,840 + 120 / 30", fontSize = 18.sp, color = Color.Gray, fontWeight = FontWeight.Normal)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("= 4,844", fontSize = 36.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Buttons
+            val greenAction = Color(0xFF1EA34B) // Tailwind green 600
+
+            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Left 3 columns
+                Column(modifier = Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CalcBtn("C", Modifier.weight(1f))
+                        CalcBtnIcon(Icons.AutoMirrored.Filled.ArrowBack, Modifier.weight(1f))
+                        CalcBtn("/", Modifier.weight(1f), bg = greenAction, fg = Color.White)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CalcBtn("7", Modifier.weight(1f))
+                        CalcBtn("8", Modifier.weight(1f))
+                        CalcBtn("9", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CalcBtn("4", Modifier.weight(1f))
+                        CalcBtn("5", Modifier.weight(1f))
+                        CalcBtn("6", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CalcBtn("1", Modifier.weight(1f))
+                        CalcBtn("2", Modifier.weight(1f))
+                        CalcBtn("3", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CalcBtnIcon(Icons.Default.SyncAlt, Modifier.weight(1f), fg = greenAction) // swap icon
+                        CalcBtn("0", Modifier.weight(1f))
+                        CalcBtn(".", Modifier.weight(1f))
+                    }
+                }
+                // Right column
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CalcBtn("*", Modifier.fillMaxWidth().aspectRatio(1f), bg = greenAction, fg = Color.White)
+                    CalcBtn("-", Modifier.fillMaxWidth().aspectRatio(1f), bg = greenAction, fg = Color.White)
+                    CalcBtn("+", Modifier.fillMaxWidth().aspectRatio(1f), bg = greenAction, fg = Color.White)
+                    CalcBtn("=", Modifier.fillMaxWidth().weight(1f), bg = greenAction, fg = Color.White, isTall = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CalcBtn(
+    text: String, 
+    modifier: Modifier = Modifier, 
+    bg: Color = Color.White, 
+    fg: Color = Color(0xFF374151),
+    isTall: Boolean = false
+) {
+    Surface(
+        modifier = modifier.then(if(!isTall) Modifier.aspectRatio(1f) else Modifier),
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        shadowElevation = 2.dp
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().clickable {}) {
+            Text(text, fontSize = 22.sp, fontWeight = FontWeight.Medium, color = fg)
+        }
+    }
+}
+
+@Composable
+fun CalcBtnIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, 
+    modifier: Modifier = Modifier, 
+    bg: Color = Color.White, 
+    fg: Color = Color(0xFF6B7280)
+) {
+    Surface(
+        modifier = modifier.aspectRatio(1f),
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        shadowElevation = 2.dp
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().clickable {}) {
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
         }
     }
 }

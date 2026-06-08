@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
@@ -53,48 +54,42 @@ fun MaterialEditorPanel(
 
     val cols = getColsForMaterial(materialTitleEn)
 
+    val primaryIndigo = Color(0xFF54578c)
+
     BackHandler(onBack = onDismiss)
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = bgCol
-    ) {
+    @OptIn(ExperimentalMaterial3Api::class)
+    Scaffold(
+        containerColor = bgCol,
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "সম্পাদনা: $bnTitle", 
+                            fontWeight = FontWeight.Bold, 
+                            color = primaryIndigo, 
+                            modifier = Modifier.padding(end = 48.dp)
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = primaryIndigo)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 16.dp),
+                .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top header bar (grey rounded pill)
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = if (isDark) Color(0xFF2D2F33) else Color.White,
-                shadowElevation = 2.dp,
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Box(modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = if (isDark) Color.LightGray else Color.DarkGray)
-                    }
-                    Text(
-                        text = "সম্পাদনা: $bnTitle",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = onBgCol,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Action Buttons 2x2 Grid
-            Column(modifier = Modifier.fillMaxWidth(0.9f)) {
+            Column(modifier = Modifier.fillMaxWidth(0.9f).padding(top = 16.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     EditorActionButton(
                         icon = Icons.Default.ContentPaste,
@@ -132,7 +127,7 @@ fun MaterialEditorPanel(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f, fill = false)
                     .padding(horizontal = 16.dp)
             ) {
                 val scrollState = rememberScrollState()
@@ -141,7 +136,10 @@ fun MaterialEditorPanel(
                     color = if (isDark) Color(0xFF1E1E22) else Color.White,
                     border = BorderStroke(1.dp, borderCol),
                     shadowElevation = 2.dp,
-                    modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .padding(bottom = 16.dp)
                 ) {
                     Column(modifier = Modifier.horizontalScroll(scrollState)) {
                         // Header Row
