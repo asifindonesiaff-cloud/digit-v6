@@ -76,3 +76,6 @@ object ShoppingMathGame
 
 @Serializable
 object MathSolverGame
+
+@Serializable
+object ScientificGenius

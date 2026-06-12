@@ -60,7 +60,8 @@ val GridLineColor = Color(0xFFD9DADB)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun WhiteboardScreen(
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToCalculator: () -> Unit = {}
 ) {
     var paths by remember { mutableStateOf(listOf<DrawnStroke>()) }
     var undonePaths by remember { mutableStateOf(listOf<DrawnStroke>()) }
@@ -73,8 +74,6 @@ fun WhiteboardScreen(
     var activeTool by remember { mutableStateOf("Pen") } // "Select", "Pen", "Eraser"
     var showMobileMenu by remember { mutableStateOf(false) }
     var showPencilSettings by remember { mutableStateOf(false) }
-    var showCalculator by remember { mutableStateOf(false) }
-    var calcOffset by remember { mutableStateOf(Offset(200f, 200f)) }
     var selectedPenType by remember { mutableStateOf("Pen") }
     val coroutineScope = rememberCoroutineScope()
 
@@ -458,9 +457,7 @@ fun WhiteboardScreen(
                     color = Color.White,
                     shadowElevation = 8.dp
                 ) {
-                    IconButton(onClick = { 
-                        showCalculator = !showCalculator
-                    }, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Calculate, "Calculator", tint = if (showCalculator) Color(0xFF1E9B44) else Color(0xFF374151)) }
+                    IconButton(onClick = onNavigateToCalculator, modifier = Modifier.size(48.dp)) { Icon(Icons.Outlined.Calculate, "Calculator", tint = Color(0xFF374151)) }
                 }
             }
 
@@ -741,8 +738,8 @@ fun WhiteboardScreen(
                         }
                     }) { Icon(Icons.Default.Map, "Minimap") }
                     HorizontalDivider(modifier = Modifier.width(24.dp), color = Color.LightGray)
-                    IconButton(onClick = { showCalculator = !showCalculator }) { 
-                        Icon(Icons.Outlined.Calculate, "Calculator", tint = if (showCalculator) Color(0xFF4F46E5) else Color.DarkGray)
+                    IconButton(onClick = onNavigateToCalculator) { 
+                        Icon(Icons.Outlined.Calculate, "Calculator", tint = Color.DarkGray)
                     }
                 }
             }
@@ -757,20 +754,6 @@ fun WhiteboardScreen(
             ) {
                 Icon(Icons.Default.AutoAwesome, "AI Magic", tint = Color.White)
             }
-        }
-        
-        if (showCalculator) {
-            CalculatorWidget(
-                onClose = { showCalculator = false },
-                modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(calcOffset.x.toInt(), calcOffset.y.toInt()) }
-                    .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            calcOffset += dragAmount
-                        }
-                    }
-            )
         }
     }
 }

@@ -117,7 +117,10 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable<Whiteboard> {
-                        WhiteboardScreen(onNavigateBack = { navController.popBackStack() })
+                        WhiteboardScreen(
+                            onNavigateBack = { navController.popBackStack() },
+                            onNavigateToCalculator = { navController.navigate(ScientificGenius) }
+                        )
                     }
                     composable<LessonDetail> {
                         com.example.ui.student.LessonDetailScreen(
@@ -198,6 +201,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable<MathSolverGame> {
                         com.example.ui.quiz.mathsolver.MathSolverScreen(onNavigateBack = { navController.popBackStack() })
+                    }
+                    composable<ScientificGenius> {
+                        com.example.ui.calculator.ScientificCalculatorScreen(onNavigateBack = { navController.popBackStack() })
                     }
                     composable<ShoppingMathGame> {
                         com.example.ui.quiz.shoppingmath.ShoppingMathApp(onNavigateBack = { navController.popBackStack() })
