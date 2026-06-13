@@ -69,7 +69,6 @@ secrets {
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
-  implementation(libs.mxparser)
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
@@ -122,16 +121,4 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
-}
-
-val copyApkTask = tasks.register<Copy>("copyApk") {
-    from(layout.buildDirectory.dir("outputs/apk/debug"))
-    into(rootProject.layout.projectDirectory.dir("apk"))
-    include("*.apk")
-}
-
-afterEvaluate {
-    tasks.named("assembleDebug") {
-        finalizedBy(copyApkTask)
-    }
 }
